@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GEOCAST - Edge Display Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body, html {
+      width: 100%; height: 100%;
+      background-color: #090d16;
+      color: #f8fafc;
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+    }
+    #stage {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #1e293b 0%, #090d16 100%);
+    }
+    #media-container {
+      width: 100%; height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    #media-image {
+      max-width: 100%; max-height: 100%;
+      object-fit: contain;
+      transition: opacity 0.4s ease-in-out;
+    }
+    #media-video {
+      max-width: 100%; max-height: 100%;
+      object-fit: contain;
+    }
+    .hud {
+      position: absolute;
+      top: 24px; left: 24px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 16px 22px;
+      font-size: 14px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      z-index: 50;
+      min-width: 320px;
+    }
+    .hud-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .hud-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .hud-label { color: #94a3b8; }
+    .hud-value { font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+    .badge-online { color: #4ade80; }
+    .badge-offline { color: #f87171; }
+    .cache-badge {
+      position: absolute;
+      bottom: 24px; right: 24px;
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(8px);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #94a3b8;
+    }
+    #setup-modal {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-box {
+      background: #1e293b;
+      padding: 32px;
+      border-radius: 16px;
+      width: 420px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .modal-box h2 { margin-bottom: 16px; font-size: 20px; color: #38bdf8; }
+    .modal-box input {
+      width: 100%;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .modal-box button {
+      width: 100%;
+      padding: 12px;
+      background: #0284c7;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 15px;
+      transition: background 0.2s;
+    }
+    .modal-box button:hover { background: #0369a1; }
+  </style>
+</head>
+<body>
+
+  <!-- Screen Setup Modal (if URL params not provided) -->
+  <div id="setup-modal">
+    <div class="modal-box">
+      <h2>GEOCAST Display Edge</h2>
+      <p style="color: #94a3b8; font-size: 13px; margin-bottom: 18px;">
+        Pair this display screen with the GEOCAST backend server.
+      </p>
+      <label style="font-size: 12px; color: #cbd5e1;">Device Identifier</label>
+      <input type="text" id="input-device-id" value="DEV001" placeholder="e.g. DEV001" />
+      
+      <label style="font-size: 12px; color: #cbd5e1;">Device Authentication Token</label>
+      <input type="text" id="input-token" value="dev_chandigarh_demo_key" placeholder="Enter device token" />
+      
+      <button onclick="startPlayer()">Connect Screen</button>
+    </div>
+  </div>
+
+  <!-- Stage -->
+  <div id="stage">
+    <div class="hud">
+      <div class="hud-title">
+        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#38bdf8; box-shadow:0 0 10px #38bdf8;"></span>
+        GEOCAST SCREEN PLAYER
+      </div>
+      <div class="hud-row"><span class="hud-label">Device ID:</span><span class="hud-value" id="hud-device-id">-</span></div>
+      <div class="hud-row"><span class="hud-label">Network Status:</span><span class="hud-value badge-offline" id="hud-status">CONNECTING...</span></div>
+      <div class="hud-row"><span class="hud-label">Active Zone:</span><span class="hud-value" style="color: #a78bfa;" id="hud-zone">Scanning GPS...</span></div>
+      <div class="hud-row"><span class="hud-label">Content Title:</span><span class="hud-value" id="hud-title">-</span></div>
+      <div class="hud-row"><span class="hud-label">Selection Reason:</span><span class="hud-value" style="color:#f59e0b;" id="hud-reason">-</span></div>
+    </div>
+
+    <div id="media-container">
+      <img id="media-image" style="display:none;" />
+      <video id="media-video" autoplay loop muted style="display:none;"></video>
+      <div id="fallback-placeholder" style="text-align: center; color: #64748b;">
+        <h1 style="font-size: 36px; color: #cbd5e1; margin-bottom: 8px;">Awaiting Content</h1>
+        <p>Location-Aware Remote Content Management System</p>
+      </div>
+    </div>
+
+    <div class="cache-badge" id="cache-indicator">
+      ● Storage: Local Cache Active
+    </div>
+  </div>
+
+  <script>
+    let socket = null;
+    let currentDeviceId = "";
+    let currentToken = "";
+    const CACHE_KEY_PREFIX = "geocast_cached_content_";
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("device_id") && urlParams.get("token")) {
+      document.getElementById("input-device-id").value = urlParams.get("device_id");
+      document.getElementById("input-token").value = urlParams.get("token");
+      startPlayer();
+    }
+
+    function startPlayer() {
+      currentDeviceId = document.getElementById("input-device-id").value.trim();
+      currentToken = document.getElementById("input-token").value.trim();
+      document.getElementById("setup-modal").style.display = "none";
+      document.getElementById("hud-device-id").innerText = currentDeviceId;
+
+      // Load cached content if available for offline resilience
+      loadFromCache();
+
+      connectWebSocket();
+    }
+
+    function connectWebSocket() {
+      const loc = window.location;
+      const wsProtocol = loc.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${wsProtocol}//${loc.host}/ws/device/${currentDeviceId}?token=${currentToken}`;
+
+      document.getElementById("hud-status").innerText = "CONNECTING...";
+      document.getElementById("hud-status").className = "hud-value badge-offline";
+
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        document.getElementById("hud-status").innerText = "ONLINE";
+        document.getElementById("hud-status").className = "hud-value badge-online";
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.event === "CONTENT_UPDATED" || (msg.event === "CONNECTED" && msg.current_content)) {
+            const data = msg.event === "CONNECTED" ? msg.current_content : msg;
+            handleContentUpdate(data);
+          }
+        } catch (e) {
+          console.error("Message parse error:", e);
+        }
+      };
+
+      socket.onclose = () => {
+        document.getElementById("hud-status").innerText = "OFFLINE (Cached)";
+        document.getElementById("hud-status").className = "hud-value badge-offline";
+        // Reconnect after 4s
+        setTimeout(connectWebSocket, 4000);
+      };
+
+      socket.onerror = (err) => {
+        console.warn("WebSocket error:", err);
+      };
+    }
+
+    function handleContentUpdate(data) {
+      const content = data.content;
+      const zoneName = data.zone_name || "None / Outside Geofence";
+      const reason = data.reason || "DIRECT";
+
+      document.getElementById("hud-zone").innerText = zoneName;
+      document.getElementById("hud-reason").innerText = reason;
+
+      if (!content || !content.file_url) {
+        document.getElementById("hud-title").innerText = "No Content Assigned";
+        return;
+      }
+
+      document.getElementById("hud-title").innerText = content.title || "Untitled";
+
+      // Save to local cache for offline resilience
+      try {
+        localStorage.setItem(CACHE_KEY_PREFIX + currentDeviceId, JSON.stringify(data));
+      } catch (e) {}
+
+      renderMedia(content);
+    }
+
+    function renderMedia(content) {
+      const img = document.getElementById("media-image");
+      const vid = document.getElementById("media-video");
+      const ph = document.getElementById("fallback-placeholder");
+
+      ph.style.display = "none";
+
+      if (content.media_type === "video") {
+        img.style.display = "none";
+        vid.src = content.file_url;
+        vid.style.display = "block";
+        vid.play().catch(err => console.log("Video auto-play handled:", err));
+      } else {
+        vid.style.display = "none";
+        vid.pause();
+        img.src = content.file_url;
+        img.style.display = "block";
+      }
+    }
+
+    function loadFromCache() {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY_PREFIX + currentDeviceId);
+        if (cached) {
+          const data = JSON.parse(cached);
+          document.getElementById("cache-indicator").innerText = "● Using Offline Cached Content";
+          handleContentUpdate(data);
+        }
+      } catch (e) {}
+    }
+  </script>
+</body>
+</html>

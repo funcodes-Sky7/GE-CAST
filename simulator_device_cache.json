@@ -1,0 +1,16 @@
+{
+  "device_id": "DEV001",
+  "content_id": 1,
+  "content": {
+    "id": 1,
+    "title": "Chandigarh Special Campaign",
+    "file_url": "/static/uploads/chandigarh_city.svg",
+    "media_type": "image",
+    "duration": 15.0,
+    "tags": null
+  },
+  "reason": "ZONE_ASSIGNMENT",
+  "zone_id": 1,
+  "zone_name": "Chandigarh Zone",
+  "timestamp": "2026-09-20T07:59:36.228967"
+}

@@ -162,7 +162,7 @@
 
     <div id="media-container">
       <img id="media-image" style="display:none;" />
-      <video id="media-video" autoplay loop muted style="display:none;"></video>
+      <video id="media-video" autoplay loop muted playsinline preload="auto" style="display:none;"></video>
       <div id="fallback-placeholder" style="text-align: center; color: #64748b;">
         <h1 style="font-size: 36px; color: #cbd5e1; margin-bottom: 8px;">Awaiting Content</h1>
         <p>Location-Aware Remote Content Management System</p>
@@ -199,6 +199,11 @@
       connectWebSocket();
     }
 
+    let currentPlaylist = [];
+    let playlistIndex = 0;
+    let rotationTimer = null;
+    let slotDurationSec = 3;
+
     function connectWebSocket() {
       const loc = window.location;
       const wsProtocol = loc.protocol === "https:" ? "wss:" : "ws:";
@@ -217,9 +222,12 @@
       socket.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.event === "CONTENT_UPDATED" || (msg.event === "CONNECTED" && msg.current_content)) {
-            const data = msg.event === "CONNECTED" ? msg.current_content : msg;
-            handleContentUpdate(data);
+          const msgEvent = msg.event || msg.type || "";
+          if (msgEvent === "PLAYLIST_UPDATED" || msgEvent === "ZONE_CHANGED" || msgEvent === "CONTENT_UPDATED") {
+            console.log(`[PLAYER] ${currentDeviceId}: received ${msgEvent} → zone=${msg.zone_name || "?"}, items=${(msg.playlist || []).length}`);
+            handleContentUpdate(msg);
+          } else if (msgEvent === "CONNECTED" && msg.current_content) {
+            handleContentUpdate(msg.current_content);
           }
         } catch (e) {
           console.error("Message parse error:", e);
@@ -239,26 +247,96 @@
     }
 
     function handleContentUpdate(data) {
-      const content = data.content;
       const zoneName = data.zone_name || "None / Outside Geofence";
       const reason = data.reason || "DIRECT";
+      slotDurationSec = data.slot_duration || 3;
 
       document.getElementById("hud-zone").innerText = zoneName;
       document.getElementById("hud-reason").innerText = reason;
 
-      if (!content || !content.file_url) {
-        document.getElementById("hud-title").innerText = "No Content Assigned";
-        return;
+      // Extract playlist items
+      if (data.playlist && data.playlist.length > 0) {
+        currentPlaylist = data.playlist;
+      } else if (data.content && data.content.file_url) {
+        currentPlaylist = [data.content];
+      } else {
+        currentPlaylist = [];
       }
 
-      document.getElementById("hud-title").innerText = content.title || "Untitled";
+      // Log zone switch prominently
+      console.log(`[PLAYER] ${currentDeviceId}: switched to zone '${zoneName}' playlist (${currentPlaylist.length} items, ${slotDurationSec}s slots)`);
 
       // Save to local cache for offline resilience
       try {
-        localStorage.setItem(CACHE_KEY_PREFIX + currentDeviceId, JSON.stringify(data));
+        localStorage.setItem(CACHE_KEY_PREFIX + currentDeviceId, JSON.stringify({
+          zone_name: zoneName,
+          reason: reason,
+          slot_duration: slotDurationSec,
+          playlist: currentPlaylist,
+          content: data.content
+        }));
       } catch (e) {}
 
-      renderMedia(content);
+      // Stop current video cleanly before switching
+      try {
+        const vid = document.getElementById("media-video");
+        if (!vid.paused) { vid.pause(); }
+        vid.removeAttribute("src");
+        vid.load();
+      } catch (e) {}
+
+      // Reset and start 3-second local playlist rotation
+      playlistIndex = 0;
+      if (rotationTimer) {
+        clearInterval(rotationTimer);
+        rotationTimer = null;
+      }
+
+      if (currentPlaylist.length === 0) {
+        document.getElementById("hud-title").innerText = "No Content Assigned";
+        const img = document.getElementById("media-image");
+        const vid = document.getElementById("media-video");
+        const ph = document.getElementById("fallback-placeholder");
+        img.style.display = "none";
+        vid.style.display = "none";
+        ph.style.display = "block";
+        return;
+      }
+
+      // Render first ad immediately
+      playCurrentAdSlot();
+
+      // If more than 1 ad, rotate every slotDurationSec (3 seconds)
+      if (currentPlaylist.length > 1) {
+        rotationTimer = setInterval(() => {
+          playlistIndex = (playlistIndex + 1) % currentPlaylist.length;
+          playCurrentAdSlot();
+        }, slotDurationSec * 1000);
+      }
+    }
+
+    function playCurrentAdSlot() {
+      if (currentPlaylist.length === 0) return;
+      const item = currentPlaylist[playlistIndex];
+      const countLabel = currentPlaylist.length > 1 ? ` (${playlistIndex + 1}/${currentPlaylist.length})` : "";
+      document.getElementById("hud-title").innerText = (item.title || "Untitled") + countLabel;
+
+      renderMedia(item);
+
+      // Record impression
+      if (item.campaign_id) {
+        try {
+          fetch(`/api/device/${currentDeviceId}/impression`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Device-Token": currentToken },
+            body: JSON.stringify({
+              campaign_id: item.campaign_id,
+              title: item.title,
+              duration_played: slotDurationSec
+            })
+          }).catch(() => {});
+        } catch (e) {}
+      }
     }
 
     function renderMedia(content) {
@@ -268,14 +346,26 @@
 
       ph.style.display = "none";
 
-      if (content.media_type === "video") {
+      const urlLower = (content.file_url || "").toLowerCase();
+      const isVideo = (content.media_type && content.media_type.toLowerCase().includes("video")) ||
+                      /\.(mp4|webm|mov|avi|mkv)$/i.test(urlLower);
+
+      if (isVideo) {
         img.style.display = "none";
+        vid.muted = true;
         vid.src = content.file_url;
+        vid.currentTime = 0;
         vid.style.display = "block";
-        vid.play().catch(err => console.log("Video auto-play handled:", err));
+        vid.load();
+        const playPromise = vid.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(err => {
+            console.log("Video auto-play policy handled:", err);
+          });
+        }
       } else {
         vid.style.display = "none";
-        vid.pause();
+        try { vid.pause(); } catch (e) {}
         img.src = content.file_url;
         img.style.display = "block";
       }
@@ -286,7 +376,7 @@
         const cached = localStorage.getItem(CACHE_KEY_PREFIX + currentDeviceId);
         if (cached) {
           const data = JSON.parse(cached);
-          document.getElementById("cache-indicator").innerText = "● Using Offline Cached Content";
+          document.getElementById("cache-indicator").innerText = "● Using Offline Cached Playlist";
           handleContentUpdate(data);
         }
       } catch (e) {}

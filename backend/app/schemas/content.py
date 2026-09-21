@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 class ContentBase(BaseModel):
@@ -8,6 +8,11 @@ class ContentBase(BaseModel):
     media_type: str = "image" # "image" | "video"
     duration: Optional[float] = 10.0
     tags: Optional[str] = None
+    zone_ids: Optional[str] = None
+    priority: Optional[int] = 5
+    is_active: Optional[bool] = True
+    is_default: Optional[bool] = False
+    campaign_id: Optional[int] = None
 
 class ContentCreate(ContentBase):
     file_url: str
@@ -20,6 +25,10 @@ class ContentUpdate(BaseModel):
     duration: Optional[float] = None
     tags: Optional[str] = None
     file_url: Optional[str] = None
+    zone_ids: Optional[str] = None
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
+    is_default: Optional[bool] = None
 
 class ContentResponse(ContentBase):
     id: int
@@ -30,3 +39,4 @@ class ContentResponse(ContentBase):
 
     class Config:
         from_attributes = True
+

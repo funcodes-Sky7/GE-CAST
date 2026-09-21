@@ -17,4 +17,9 @@ export const contentApi = {
   delete: async (contentId: number): Promise<void> => {
     await apiClient.delete(`/content/${contentId}`);
   },
+
+  update: async (contentId: number, data: Partial<Content>): Promise<Content> => {
+    const res = await apiClient.put<Content>(`/content/${contentId}`, data);
+    return res.data;
+  },
 };

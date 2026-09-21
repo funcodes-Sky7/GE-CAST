@@ -27,7 +27,7 @@ import Modal from '../components/ui/Modal';
 
 export default function SettingsPage() {
   const settings = useSettingsStore();
-  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'notifications' | 'integrations' | 'system'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'security'>('general');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateMsg, setUpdateMsg] = useState('');
@@ -156,24 +156,6 @@ export default function SettingsPage() {
           onClick={() => setActiveTab('security')}
         >
           Security
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'notifications' ? 'active' : ''}`}
-          onClick={() => setActiveTab('notifications')}
-        >
-          Notifications
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'integrations' ? 'active' : ''}`}
-          onClick={() => setActiveTab('integrations')}
-        >
-          Integrations
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'system' ? 'active' : ''}`}
-          onClick={() => setActiveTab('system')}
-        >
-          System
         </button>
       </div>
 
@@ -786,145 +768,6 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ─── NOTIFICATIONS TAB ──────────────────────────────────── */}
-      {activeTab === 'notifications' && (
-        <div className="settings-card" style={{ maxWidth: 800 }}>
-          <div className="settings-header">
-            <div className="settings-icon-badge"><Bell size={20} /></div>
-            <div>
-              <div className="settings-title">Notification Channels</div>
-              <div className="settings-subtitle">Manage automated alert dispatching for display operations.</div>
-            </div>
-          </div>
-
-          <div className="switch-row">
-            <div>
-              <div className="switch-label">Device Offline Alerts</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Notify when a device stops heartbeating for {'>'} 2 intervals</div>
-            </div>
-            <label className="switch"><input type="checkbox" defaultChecked /><span className="switch-slider" /></label>
-          </div>
-
-          <div className="switch-row">
-            <div>
-              <div className="switch-label">Schedule Overlap Warning</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Warn when two high-priority campaigns target the same zone</div>
-            </div>
-            <label className="switch"><input type="checkbox" defaultChecked /><span className="switch-slider" /></label>
-          </div>
-
-          <div className="form-group" style={{ marginTop: '12px' }}>
-            <label className="form-label">Slack / Discord Webhook URL</label>
-            <input className="form-input" placeholder="https://hooks.slack.com/services/..." />
-          </div>
-
-          <button className="btn btn-secondary btn-sm" onClick={() => alert('Test notification dispatched via Webhook!')}>
-            Send Test Alert
-          </button>
-        </div>
-      )}
-
-      {/* ─── INTEGRATIONS TAB ───────────────────────────────────── */}
-      {activeTab === 'integrations' && (
-        <div className="settings-grid">
-          <div className="settings-card">
-            <div className="settings-header">
-              <div className="settings-icon-badge"><Sliders size={20} /></div>
-              <div>
-                <div className="settings-title">Weather & Environmental Data</div>
-                <div className="settings-subtitle">Trigger contextual signage based on real-time weather.</div>
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">OpenWeatherMap API Key</label>
-              <input className="form-input" placeholder="owm_live_key_••••••••" />
-            </div>
-            <div className="switch-row">
-              <span className="switch-label">Enable Weather Trigger Engine</span>
-              <label className="switch"><input type="checkbox" defaultChecked /><span className="switch-slider" /></label>
-            </div>
-          </div>
-
-          <div className="settings-card">
-            <div className="settings-header">
-              <div className="settings-icon-badge"><Database size={20} /></div>
-              <div>
-                <div className="settings-title">Cloud Storage Sync</div>
-                <div className="settings-subtitle">Offload media asset delivery to CDN or object storage.</div>
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Storage Provider</label>
-              <select className="form-select">
-                <option>Local Server Storage (/backend/static/uploads)</option>
-                <option>Amazon AWS S3</option>
-                <option>Google Cloud Storage (GCS)</option>
-                <option>Cloudflare R2</option>
-              </select>
-            </div>
-            <div className="switch-row">
-              <span className="switch-label">Auto-transcode uploaded videos to WebM</span>
-              <label className="switch"><input type="checkbox" defaultChecked /><span className="switch-slider" /></label>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── SYSTEM TAB ─────────────────────────────────────────── */}
-      {activeTab === 'system' && (
-        <div className="settings-grid">
-          <div className="settings-card">
-            <div className="settings-header">
-              <div className="settings-icon-badge"><Cpu size={20} /></div>
-              <div>
-                <div className="settings-title">Server Metrics</div>
-                <div className="settings-subtitle">Real-time resource utilization.</div>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div style={{ background: 'var(--bg-hover)', padding: '12px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>CPU Utilization</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--primary)', marginTop: '4px' }}>12.4%</div>
-              </div>
-              <div style={{ background: 'var(--bg-hover)', padding: '12px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Memory (RAM)</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--primary)', marginTop: '4px' }}>348 MB</div>
-              </div>
-              <div style={{ background: 'var(--bg-hover)', padding: '12px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Database Latency</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--accent-green)', marginTop: '4px' }}>1.8 ms</div>
-              </div>
-              <div style={{ background: 'var(--bg-hover)', padding: '12px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Active WebSockets</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--primary)', marginTop: '4px' }}>4 channels</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="settings-card">
-            <div className="settings-header">
-              <div className="settings-icon-badge"><Database size={20} /></div>
-              <div>
-                <div className="settings-title">Services Status</div>
-                <div className="settings-subtitle">Infrastructure health checks.</div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {[
-                { name: 'FastAPI Web Core', status: 'Operational', color: 'var(--accent-green)' },
-                { name: 'PostgreSQL / PostGIS Database', status: 'Operational', color: 'var(--accent-green)' },
-                { name: 'WebSocket Broadcast Server', status: 'Operational', color: 'var(--accent-green)' },
-                { name: 'Device Heartbeat Monitor', status: 'Active (30s interval)', color: 'var(--accent-green)' },
-              ].map((s) => (
-                <div key={s.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 500 }}>{s.name}</span>
-                  <span style={{ fontSize: '12px', color: s.color, fontWeight: 600 }}>● {s.status}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Reset Confirmation Modal */}
       {showResetModal && (

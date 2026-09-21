@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Radio, Eye, EyeOff } from 'lucide-react';
 import { authApi } from '../api/auth';
 import { useAuthStore } from '../store/authStore';
+import { useAdvertiserAuthStore } from '../store/advertiserAuthStore';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const data = await authApi.login({ email, password });
+      useAdvertiserAuthStore.getState().logout();
       login(data.access_token, data.user);
       navigate('/dashboard');
     } catch (err: any) {
@@ -101,6 +103,15 @@ export default function LoginPage() {
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Demo credentials (pre-filled):</p>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
             admin@geocast.io / admin123
+          </p>
+        </div>
+
+        <div style={{ marginTop: '18px', textAlign: 'center' }}>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+            Are you an advertiser?{' '}
+            <Link to="/advertiser/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
+              Advertiser Portal →
+            </Link>
           </p>
         </div>
       </div>

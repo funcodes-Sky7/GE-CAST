@@ -1,4 +1,5 @@
 from typing import Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -209,3 +210,50 @@ def get_device_config(
         "refresh_interval": device.refresh_interval,
         "status": device.status
     }
+
+class DeviceImpressionRequest(BaseModel):
+    campaign_id: Optional[int] = None
+    title: Optional[str] = None
+    zone_id: Optional[int] = None
+    zone_name: Optional[str] = None
+    duration_played: float = 3.0
+
+@router.post("/impression")
+@router.post("/{device_id}/impression")
+def record_ad_impression(
+    payload: DeviceImpressionRequest,
+    device_id: Optional[str] = None,
+    x_device_token: Optional[str] = Header(None, alias="X-Device-Token"),
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """Record verified playback impression for an advertisement slot (3s)"""
+    if device_id:
+        device = get_device_by_id_str(db, device_id)
+        if not device:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    else:
+        device = authenticate_device(x_device_token, token, db)
+
+    now = datetime.utcnow()
+    ad_title = payload.title or (f"Campaign #{payload.campaign_id}" if payload.campaign_id else "Ad Slot")
+    zone_label = payload.zone_name or (device.current_zone.name if device.current_zone else "Transit")
+    
+    log_entry = Log(
+        device_id=device.device_id,
+        event_type="AD_IMPRESSION",
+        message=f"Ad Impression: '{ad_title}' played for {payload.duration_played:.0f}s in {zone_label}",
+        details_json=json.dumps({
+            "campaign_id": payload.campaign_id,
+            "title": ad_title,
+            "zone_id": payload.zone_id or device.current_zone_id,
+            "zone_name": zone_label,
+            "duration": payload.duration_played,
+            "device_id": device.device_id,
+            "device_type": device.device_type
+        }),
+        timestamp=now
+    )
+    db.add(log_entry)
+    db.commit()
+    return {"status": "ok", "message": "Impression recorded", "timestamp": now.isoformat()}

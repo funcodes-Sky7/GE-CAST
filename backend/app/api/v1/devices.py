@@ -32,6 +32,12 @@ def get_device_locations(db: Session = Depends(get_db)):
     devices = db.query(Device).all()
     results = []
     for d in devices:
+        assignment = get_current_content(db, d)
+        pl = assignment.get("playlist") or []
+        dur = assignment.get("slot_duration") or 3
+        active_title = d.active_content.title if d.active_content else (pl[0]["title"] if pl else None)
+        active_url = d.active_content.file_url if d.active_content else (pl[0]["file_url"] if pl else None)
+
         results.append(DeviceLocationMarker(
             device_id=d.device_id,
             name=d.name,
@@ -41,9 +47,11 @@ def get_device_locations(db: Session = Depends(get_db)):
             longitude=d.current_lon,
             location_name=d.location_name,
             status=d.status,
-            current_zone=d.current_zone.name if d.current_zone else None,
-            current_content_title=d.active_content.title if d.active_content else None,
-            current_content_url=d.active_content.file_url if d.active_content else None,
+            current_zone=d.current_zone.name if d.current_zone else assignment.get("zone_name"),
+            current_content_title=active_title,
+            current_content_url=active_url,
+            playlist=pl,
+            slot_duration=dur,
             last_seen=d.last_seen
         ))
     return results
@@ -174,10 +182,18 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
     # Determine playing content & assignment rationale
     assignment = get_current_content(db, device)
     reason_code = assignment.get("reason", "NONE")
+    playlist = assignment.get("playlist") or []
+    slot_duration = assignment.get("slot_duration") or 3
 
     reason_human = "Default Content Fallback"
     assigned_by = "Global Display Policy"
-    if reason_code == "DEVICE_OVERRIDE":
+    if reason_code == "CAMPAIGN_ROTATION":
+        reason_human = "Zone Campaign Rotation (3s slots)"
+        assigned_by = f"Rotating {len(playlist)} advertisements for {assignment.get('zone_name') or 'Current Zone'}"
+    elif reason_code == "CAMPAIGN_BROADCAST":
+        reason_human = "Active Advertiser Campaign"
+        assigned_by = f"Campaign targeting {assignment.get('zone_name') or 'Current Zone'}"
+    elif reason_code == "DEVICE_OVERRIDE":
         reason_human = "Device Content Override"
         assigned_by = f"Manual override set on {device.name}"
     elif reason_code == "ZONE_SCHEDULE":
@@ -201,7 +217,9 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
         **base_resp.dict(),
         assignment_reason=reason_human,
         assigned_by=assigned_by,
-        recent_logs=[DeviceLogItem.from_orm(l) for l in logs]
+        recent_logs=[DeviceLogItem.from_orm(l) for l in logs],
+        playlist=playlist,
+        slot_duration=slot_duration
     )
 
 @router.put("/{device_id}", response_model=DeviceResponse)
@@ -252,6 +270,30 @@ async def execute_device_action(device_id: str, action_req: DeviceActionRequest,
     })
 
     return {"status": "success", "action": action, "device_id": device.device_id}
+
+@router.get("/{device_id}/playlist")
+def get_device_playlist_now(device_id: str, db: Session = Depends(get_db)):
+    """
+    Compute and return the current advertisement playlist for a device.
+    This is the authoritative REST endpoint for the dashboard inspector.
+    Calls the same assignment engine as WebSocket telemetry.
+    """
+    device = get_device_by_id_str(db, device_id)
+    if not device:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    assignment = get_current_content(db, device)
+    playlist = assignment.get("playlist") or []
+    return {
+        "device_id": device_id,
+        "zone_id": assignment.get("zone_id"),
+        "zone_name": assignment.get("zone_name"),
+        "reason": assignment.get("reason", "NONE"),
+        "slot_duration": assignment.get("slot_duration") or 3,
+        "playlist": playlist,
+        "playlist_length": len(playlist),
+    }
+
 
 @router.get("/{device_id}/logs", response_model=List[DeviceLogItem])
 def get_device_logs(device_id: str, limit: int = 50, db: Session = Depends(get_db)):

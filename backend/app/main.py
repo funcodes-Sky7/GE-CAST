@@ -11,7 +11,7 @@ from app.db.session import engine, Base
 # Import all models to ensure metadata registration
 import app.db.base
 
-from app.api.v1 import auth, devices, content, zones, schedules, dashboard, device_api, fleets
+from app.api.v1 import auth, devices, content, zones, schedules, dashboard, device_api, fleets, advertiser
 from app.api import websockets
 from app.services.heartbeat_monitor import monitor_device_heartbeats
 
@@ -52,9 +52,8 @@ app.add_middleware(
 )
 
 # Static Files
-static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-uploads_dir = os.path.join(static_dir, "uploads")
-player_dir = os.path.join(static_dir, "player")
+uploads_dir = settings.UPLOAD_DIR
+player_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "player")
 
 os.makedirs(uploads_dir, exist_ok=True)
 os.makedirs(player_dir, exist_ok=True)
@@ -71,6 +70,7 @@ app.include_router(zones.router, prefix=settings.API_V1_STR)
 app.include_router(schedules.router, prefix=settings.API_V1_STR)
 app.include_router(dashboard.router, prefix=settings.API_V1_STR)
 app.include_router(device_api.router, prefix=settings.API_V1_STR)
+app.include_router(advertiser.router, prefix=settings.API_V1_STR)
 
 # Top-level aliases requested in problem statement
 # e.g., /api/dashboard/overview, /api/devices, /api/device, /api/fleets

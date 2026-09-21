@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, Boolean, ForeignKey
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.session import Base
 
@@ -14,4 +15,10 @@ class Content(Base):
     file_size = Column(Integer, nullable=True)          # Bytes
     duration = Column(Float, default=10.0)              # Display duration in seconds
     tags = Column(String(255), nullable=True)           # Comma separated
+    zone_ids = Column(Text, nullable=True)              # Comma-separated target zone IDs e.g. "2,6,3,11"
+    priority = Column(Integer, default=5, nullable=False) # 1-10 priority weighting
+    is_active = Column(Boolean, default=True, nullable=False) # Enable / disable playback
+    is_default = Column(Boolean, default=False, nullable=False) # Fallback content
+    campaign_id = Column(Integer, ForeignKey("campaigns.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+

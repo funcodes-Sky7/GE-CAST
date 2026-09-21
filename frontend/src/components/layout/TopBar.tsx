@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Bell, ChevronDown, LogOut, User as UserIcon } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -8,12 +8,29 @@ interface TopBarProps {
   wsConnected?: boolean;
 }
 
+/** Static searchable items — pages & quick links */
+const SEARCH_ITEMS = [
+  { label: 'Dashboard',         path: '/dashboard',   desc: 'System overview & live stats' },
+  { label: 'Devices',           path: '/devices',     desc: 'Manage and monitor all edge displays' },
+  { label: 'Content',           path: '/content',     desc: 'Upload and manage ad creatives' },
+  { label: 'Zones',             path: '/zones',       desc: 'Geofencing and broadcast zones' },
+  { label: 'Schedules',         path: '/schedules',   desc: 'Ad scheduling and time-slots' },
+  { label: 'Monitoring',        path: '/monitoring',  desc: 'Live telemetry and health checks' },
+  { label: 'Reports',           path: '/reports',     desc: 'Analytics and campaign reports' },
+  { label: 'Settings',          path: '/settings',    desc: 'System configuration' },
+  { label: 'Settings — General',  path: '/settings',  desc: 'Organization & appearance settings' },
+  { label: 'Settings — Security', path: '/settings',  desc: 'API keys and access control' },
+];
+
 export default function TopBar({ wsConnected: propWsConnected }: TopBarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const [internalWsConnected, setInternalWsConnected] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   useWebSocket({
     onOpen: () => setInternalWsConnected(true),
@@ -22,6 +39,40 @@ export default function TopBar({ wsConnected: propWsConnected }: TopBarProps) {
 
   const wsConnected = propWsConnected !== undefined ? propWsConnected : internalWsConnected;
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = searchQuery.trim().length > 0
+    ? SEARCH_ITEMS.filter(
+        (item) =>
+          item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          item.desc.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : [];
+
+  const handleSelectResult = (path: string) => {
+    setSearchQuery('');
+    setShowDropdown(false);
+    navigate(path);
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && filtered.length > 0) {
+      handleSelectResult(filtered[0].path);
+    }
+    if (e.key === 'Escape') {
+      setShowDropdown(false);
+      setSearchQuery('');
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -31,7 +82,7 @@ export default function TopBar({ wsConnected: propWsConnected }: TopBarProps) {
   return (
     <header className="topbar">
       {/* Center / Left Search Bar */}
-      <div style={{ flex: 1, maxWidth: 460 }}>
+      <div ref={searchRef} style={{ flex: 1, maxWidth: 460, position: 'relative' }}>
         <div style={{ position: 'relative', width: '100%' }}>
           <Search
             size={16}
@@ -41,14 +92,22 @@ export default function TopBar({ wsConnected: propWsConnected }: TopBarProps) {
               top: '50%',
               transform: 'translateY(-50%)',
               color: 'var(--text-muted)',
+              pointerEvents: 'none',
             }}
           />
           <input
             type="text"
             className="form-input"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowDropdown(true);
+            }}
+            onFocus={() => setShowDropdown(true)}
+            onKeyDown={handleSearchKeyDown}
             style={{
               paddingLeft: '38px',
-              paddingRight: '50px',
+              paddingRight: '14px',
               height: '38px',
               borderRadius: '10px',
               background: 'var(--bg-hover)',
@@ -57,24 +116,76 @@ export default function TopBar({ wsConnected: propWsConnected }: TopBarProps) {
             }}
             placeholder="Search devices, content, zones, or settings..."
           />
-          <span
+        </div>
+
+        {/* Search Results Dropdown */}
+        {showDropdown && filtered.length > 0 && (
+          <div
             style={{
               position: 'absolute',
-              right: 12,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              fontSize: '11px',
-              fontWeight: 600,
-              padding: '2px 6px',
+              top: '44px',
+              left: 0,
+              right: 0,
               background: 'var(--bg-surface)',
               border: '1px solid var(--border)',
-              borderRadius: '4px',
+              borderRadius: 'var(--radius)',
+              boxShadow: 'var(--shadow-md)',
+              zIndex: 200,
+              overflow: 'hidden',
+            }}
+          >
+            {filtered.map((item) => (
+              <button
+                key={item.label}
+                onClick={() => handleSelectResult(item.path)}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  width: '100%',
+                  padding: '10px 14px',
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.1s',
+                  borderBottom: '1px solid var(--border-light)',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {item.label}
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>
+                  {item.desc}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* No results state */}
+        {showDropdown && searchQuery.trim().length > 0 && filtered.length === 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '44px',
+              left: 0,
+              right: 0,
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              boxShadow: 'var(--shadow-md)',
+              zIndex: 200,
+              padding: '12px 14px',
+              fontSize: '13px',
               color: 'var(--text-muted)',
             }}
           >
-            ⌘ K
-          </span>
-        </div>
+            No results for "<strong>{searchQuery}</strong>"
+          </div>
+        )}
       </div>
 
       {/* Right Controls */}

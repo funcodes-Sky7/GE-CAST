@@ -5,5 +5,7 @@ from app.models.fleet import Fleet
 from app.models.device import Device
 from app.models.schedule import Schedule
 from app.models.log import Log
+from app.models.campaign import Campaign
 
-__all__ = ["User", "Content", "Zone", "Fleet", "Device", "Schedule", "Log"]
+__all__ = ["User", "Content", "Zone", "Fleet", "Device", "Schedule", "Log", "Campaign"]
+

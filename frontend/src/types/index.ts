@@ -47,6 +47,11 @@ export interface Content {
   file_size?: number;
   duration: number;
   tags?: string;
+  zone_ids?: string;
+  priority?: number;
+  is_active?: boolean;
+  is_default?: boolean;
+  campaign_id?: number;
   created_at: string;
 }
 
@@ -125,6 +130,8 @@ export interface WsDeviceTelemetry {
   zone_name?: string;
   active_content_title?: string;
   active_content_url?: string;
+  playlist?: import('./device').PlaylistItem[];
+  slot_duration?: number;
   reason?: string;
   last_seen?: string;
 }

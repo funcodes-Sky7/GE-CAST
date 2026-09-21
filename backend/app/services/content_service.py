@@ -31,7 +31,19 @@ def save_uploaded_media(file: UploadFile) -> Tuple[str, str, int, str]:
     file_url = f"/static/uploads/{unique_filename}"
     return file_url, dest_path, file_size, media_type
 
-def create_content(db: Session, title: str, description: Optional[str], file: UploadFile, duration: float = 10.0, tags: Optional[str] = None) -> Content:
+def create_content(
+    db: Session,
+    title: str,
+    description: Optional[str],
+    file: UploadFile,
+    duration: float = 10.0,
+    tags: Optional[str] = None,
+    zone_ids: Optional[str] = None,
+    priority: int = 5,
+    is_active: bool = True,
+    is_default: bool = False,
+    campaign_id: Optional[int] = None
+) -> Content:
     file_url, storage_key, file_size, media_type = save_uploaded_media(file)
     db_content = Content(
         title=title,
@@ -41,11 +53,21 @@ def create_content(db: Session, title: str, description: Optional[str], file: Up
         media_type=media_type,
         file_size=file_size,
         duration=duration,
-        tags=tags
+        tags=tags,
+        zone_ids=zone_ids,
+        priority=priority,
+        is_active=is_active,
+        is_default=is_default,
+        campaign_id=campaign_id
     )
     db.add(db_content)
     db.commit()
     db.refresh(db_content)
+    try:
+        from app.services.device_service import invalidate_device_playlist_cache
+        invalidate_device_playlist_cache()
+    except Exception:
+        pass
     return db_content
 
 def update_content(db: Session, content_id: int, updates: ContentUpdate) -> Optional[Content]:
@@ -56,6 +78,11 @@ def update_content(db: Session, content_id: int, updates: ContentUpdate) -> Opti
         setattr(content, field, value)
     db.commit()
     db.refresh(content)
+    try:
+        from app.services.device_service import invalidate_device_playlist_cache
+        invalidate_device_playlist_cache()
+    except Exception:
+        pass
     return content
 
 def delete_content(db: Session, content_id: int) -> bool:
@@ -70,4 +97,22 @@ def delete_content(db: Session, content_id: int) -> bool:
             pass
     db.delete(content)
     db.commit()
+    try:
+        from app.services.device_service import invalidate_device_playlist_cache
+        invalidate_device_playlist_cache()
+    except Exception:
+        pass
     return True
+
+
+def get_eligible_content_for_zone(db: Session, zone, device=None, current_time=None):
+    """Authoritative Content-first zone eligibility pipeline."""
+    from app.services.assignment_engine import get_eligible_content_for_zone as _get_zone_content
+    return _get_zone_content(db, zone, device=device, current_time=current_time)
+
+
+def get_eligible_content_for_device(db: Session, device_id: str, current_time=None):
+    """Authoritative Content-first device eligibility pipeline."""
+    from app.services.assignment_engine import get_eligible_content_for_device as _get_device_content
+    return _get_device_content(db, device_id, current_time=current_time)
+

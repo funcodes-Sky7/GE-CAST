@@ -74,4 +74,10 @@ export const devicesApi = {
     const res = await client.post<Fleet>('/fleets', data);
     return res.data;
   },
+
+  // Fetch fresh playlist from the assignment engine for a specific device
+  getPlaylist: async (deviceId: string): Promise<{ playlist: any[]; zone_name: string | null; reason: string; slot_duration: number }> => {
+    const res = await client.get(`/devices/${deviceId}/playlist`);
+    return res.data;
+  },
 };

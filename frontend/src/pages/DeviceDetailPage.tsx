@@ -10,6 +10,7 @@ import { devicesApi } from '../api/devices';
 import { zonesApi } from '../api/zones';
 import DeviceStatusBadge from '../components/devices/DeviceStatusBadge';
 import LiveMap from '../components/map/LiveMap';
+import DeviceAdRotationCard from '../components/devices/DeviceAdRotationCard';
 import type { DeviceLocationMarker, WsEvent } from '../types';
 import { useWebSocket } from '../hooks/useWebSocket';
 
@@ -43,6 +44,10 @@ export default function DeviceDetailPage() {
   const qc = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  // Live state updated immediately via WebSocket (overrides REST cache on zone change)
+  const [livePlaylist, setLivePlaylist] = useState<any[] | null>(null);
+  const [liveZoneName, setLiveZoneName] = useState<string | null>(null);
+  const [liveSlotDuration, setLiveSlotDuration] = useState<number | null>(null);
 
   const { data: device, isLoading, error, refetch } = useQuery({
     queryKey: ['device-detail', device_id],
@@ -58,9 +63,17 @@ export default function DeviceDetailPage() {
 
   // Handle incoming real-time telemetry if it relates to this device
   const handleWsMessage = useCallback((event: WsEvent) => {
-    if (event.device_id === device_id) {
-      refetch();
+    if (event.device_id !== device_id) return;
+    const e = event as any;
+    if (e.event === 'PLAYLIST_UPDATED' || e.type === 'PLAYLIST_UPDATED') {
+      // Immediately update playlist without waiting for REST refetch
+      if (e.playlist) setLivePlaylist(e.playlist);
+      if (e.zone_name) setLiveZoneName(e.zone_name);
+      if (e.slot_duration) setLiveSlotDuration(e.slot_duration);
+      console.log(`[PLAYER] ${device_id}: received PLAYLIST_UPDATED → zone=${e.zone_name}, items=${(e.playlist || []).length}`);
     }
+    // Always trigger a refetch to sync rest of device metadata
+    refetch();
   }, [device_id, refetch]);
 
   useWebSocket({ onMessage: handleWsMessage });
@@ -182,7 +195,7 @@ export default function DeviceDetailPage() {
             <ShieldCheck size={14} /> Refresh Config
           </button>
           <a
-            href={`http://127.0.0.1:8000/player/${device.device_id}`}
+            href={`http://127.0.0.1:8000/player/${device.device_id}?device_id=${device.device_id}&token=${device.token || ''}`}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-primary btn-sm"
@@ -301,106 +314,27 @@ export default function DeviceDetailPage() {
         {/* Right Column: Currently Playing Media & Decision Reason */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          {/* Active Content Card */}
-          <div className="card">
-            <div className="card-header">
-              <div>
-                <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Film size={16} style={{ color: 'var(--accent-blue)' }} /> Currently Playing Media
-                </div>
-                <div className="card-subtitle">Edge display payload evaluated by GEOCAST Decision Engine</div>
-              </div>
-              {device.assignment_reason && (
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    padding: '3px 8px',
-                    borderRadius: '12px',
-                    background: 'rgba(59, 130, 246, 0.15)',
-                    color: 'var(--accent-blue)',
-                    border: '1px solid rgba(59, 130, 246, 0.3)'
-                  }}
-                >
-                  {device.assignment_reason}
-                </span>
-              )}
-            </div>
-
-            {device.active_content ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {device.active_content.file_url && (
-                  <div
-                    style={{
-                      width: '100%',
-                      height: '200px',
-                      borderRadius: 'var(--radius)',
-                      overflow: 'hidden',
-                      background: '#0f172a',
-                      position: 'relative'
-                    }}
-                  >
-                    <img
-                      src={device.active_content.file_url}
-                      alt={device.active_content.title}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        padding: '8px 12px',
-                        background: 'linear-gradient(transparent, rgba(0,0,0,0.85))',
-                        color: 'white',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {device.active_content.title}
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '11px' }}>Campaign Title</span>
-                    <strong style={{ color: 'var(--text-primary)' }}>{device.active_content.title}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '11px' }}>Duration</span>
-                    <span style={{ color: 'var(--text-primary)' }}>{device.active_content.duration}s loop</span>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '11px' }}>Assigned By</span>
-                    <span style={{ color: 'var(--text-secondary)' }}>{device.assigned_by || 'Zone Geo-Policy'}</span>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '11px' }}>Media Type</span>
-                    <span style={{ color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{device.active_content.media_type || 'image'}</span>
-                  </div>
-                </div>
-
-                {device.active_content.description && (
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                    {device.active_content.description}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="empty-state" style={{ padding: '30px 0' }}>
-                <Film size={36} />
-                <p>No active content assigned to this screen</p>
-                <Link to="/content" className="btn btn-secondary btn-sm" style={{ marginTop: '10px' }}>
-                  Manage Media Library
-                </Link>
-              </div>
-            )}
-          </div>
+          {/* Live Ad Rotation & Content Inspector */}
+          <DeviceAdRotationCard
+            playlist={livePlaylist !== null ? livePlaylist : (device.playlist || (device.active_content ? [{
+              campaign_id: null,
+              content_id: device.active_content.id,
+              title: device.active_content.title,
+              file_url: device.active_content.file_url,
+              media_type: device.active_content.media_type,
+              duration: device.active_content.duration,
+              priority: 5,
+              description: device.active_content.description
+            }] : []))}
+            slotDuration={liveSlotDuration !== null ? liveSlotDuration : (device.slot_duration || 3)}
+            currentZoneName={liveZoneName !== null ? liveZoneName : device.current_zone?.name}
+            deviceId={device.device_id}
+            deviceName={device.name}
+            deviceType={device.device_type}
+            status={device.status}
+            locationName={device.location_name}
+            showInspectorHeader={false}
+          />
 
           {/* Activity Log for this Device */}
           <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>

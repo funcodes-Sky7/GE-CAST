@@ -14,38 +14,56 @@ L.Icon.Default.mergeOptions({
 interface LiveMapProps {
   devices: DeviceLocationMarker[];
   zones: Zone[];
+  selectedDeviceId?: string | null;
+  onSelectDevice?: (device: DeviceLocationMarker) => void;
 }
 
-function makeDeviceIcon(status: string) {
+function makeDeviceIcon(status: string, isSelected: boolean = false) {
   const color = status === 'ONLINE' ? '#22c55e' : status === 'OFFLINE' ? '#ef4444' : '#94a3b8';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
-    <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="${color}" opacity="0.9"/>
-    <circle cx="14" cy="14" r="7" fill="white" opacity="0.9"/>
-    <circle cx="14" cy="14" r="4" fill="${color}"/>
+  const stroke = isSelected ? '#38bdf8' : 'white';
+  const strokeWidth = isSelected ? '2.5' : '1.5';
+  const filter = isSelected ? 'filter="drop-shadow(0 0 6px #38bdf8)"' : '';
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 30 38" ${filter}>
+    <path d="M15 1C7.82 1 2 6.82 2 14c0 9.5 13 23 13 23S28 23.5 28 14C28 6.82 22.18 1 15 1z" fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="0.95"/>
+    <circle cx="15" cy="14" r="7" fill="white" opacity="0.95"/>
+    <circle cx="15" cy="14" r="4" fill="${color}"/>
   </svg>`;
+
   return L.divIcon({
     html: svg,
-    className: '',
-    iconSize: [28, 36],
-    iconAnchor: [14, 36],
-    popupAnchor: [0, -36],
+    className: 'geocast-live-marker',
+    iconSize: [30, 38],
+    iconAnchor: [15, 38],
+    popupAnchor: [0, -38],
   });
 }
 
-export default function LiveMap({ devices, zones }: LiveMapProps) {
+export default function LiveMap({ devices, zones, selectedDeviceId, onSelectDevice }: LiveMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const circlesRef = useRef<L.Circle[]>([]);
   const polygonsRef = useRef<L.Polygon[]>([]);
+  
+  // Track active requestAnimationFrame animations for smooth marker gliding
+  const animationsRef = useRef<Map<string, {
+    startLat: number;
+    startLon: number;
+    targetLat: number;
+    targetLon: number;
+    startTime: number;
+    duration: number;
+    rafId: number;
+  }>>(new Map());
 
   // Initialize map
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [20.5937, 78.9629], // India center
-      zoom: 5,
+      center: [23.5, 77.5], // Centered over north-central India for better route coverage
+      zoom: 5.5,
       zoomControl: true,
     });
 
@@ -57,12 +75,15 @@ export default function LiveMap({ devices, zones }: LiveMapProps) {
     mapRef.current = map;
 
     return () => {
+      // Cancel any running animations on unmount
+      animationsRef.current.forEach((anim) => cancelAnimationFrame(anim.rafId));
+      animationsRef.current.clear();
       map.remove();
       mapRef.current = null;
     };
   }, []);
 
-  // Update device markers when devices data changes (triggered by every WS telemetry event)
+  // Update device markers with smooth requestAnimationFrame interpolation
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -73,20 +94,31 @@ export default function LiveMap({ devices, zones }: LiveMapProps) {
       if (device.latitude == null || device.longitude == null) return;
       seenIds.add(device.device_id);
 
-      const icon = makeDeviceIcon(device.status);
+      const isSelected = selectedDeviceId === device.device_id;
+      const icon = makeDeviceIcon(device.status, isSelected);
 
-      // Rich popup with live zone + advertisement (content) info
+      // Build rich popup content
       const zoneHtml = device.current_zone
         ? `<div style="margin-top:6px;padding:4px 8px;background:rgba(59,130,246,0.12);border-radius:6px;font-size:12px;color:#2563eb">
              📍 Zone: <b>${device.current_zone}</b>
            </div>`
-        : `<div style="margin-top:6px;font-size:11px;color:#94a3b8;font-style:italic">No active zone</div>`;
+        : `<div style="margin-top:6px;font-size:11px;color:#94a3b8;font-style:italic">Transit Corridor</div>`;
 
-      const contentHtml = device.current_content_title
-        ? `<div style="margin-top:4px;padding:4px 8px;background:rgba(34,197,94,0.1);border-radius:6px;font-size:12px;color:#16a34a">
-             🎬 Ad: <b>${device.current_content_title}</b>
-           </div>`
-        : `<div style="margin-top:4px;font-size:11px;color:#94a3b8;font-style:italic">No ad assigned</div>`;
+      // Rotation playlist display
+      let adHtml = '';
+      if (device.playlist && device.playlist.length > 1) {
+        const topTitles = device.playlist.slice(0, 3).map((p, i) => `${i + 1}. ${p.title}`).join('<br/>');
+        adHtml = `<div style="margin-top:5px;padding:6px 8px;background:rgba(34,197,94,0.1);border-radius:6px;font-size:11px;color:#16a34a;border:1px solid rgba(34,197,94,0.25)">
+          <div style="font-weight:700;margin-bottom:3px">🎬 ${device.playlist.length} Ads Rotating (3s slot):</div>
+          <div style="font-size:10px;line-height:1.4;color:#0f172a">${topTitles}</div>
+        </div>`;
+      } else if (device.current_content_title) {
+        adHtml = `<div style="margin-top:5px;padding:5px 8px;background:rgba(34,197,94,0.1);border-radius:6px;font-size:11px;color:#16a34a">
+          🎬 Ad: <b>${device.current_content_title}</b>
+        </div>`;
+      } else {
+        adHtml = `<div style="margin-top:5px;font-size:11px;color:#94a3b8;font-style:italic">No ad assigned</div>`;
+      }
 
       const typeLabel = device.device_type
         ? `<span style="font-size:10px;color:#64748b">${device.device_type.replace('_', ' ')}</span>`
@@ -96,38 +128,91 @@ export default function LiveMap({ devices, zones }: LiveMapProps) {
         : '';
 
       const popup = `
-        <div style="font-family:Inter,sans-serif;min-width:210px;padding:2px">
+        <div style="font-family:Inter,sans-serif;min-width:220px;padding:2px">
           <div style="font-weight:700;font-size:14px;color:#0f172a;margin-bottom:2px">${device.name}</div>
           <div style="margin-bottom:6px">${typeLabel}${fleetLabel}</div>
-          <div style="margin-bottom:6px">
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
             <span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;
               background:${device.status === 'ONLINE' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'};
               color:${device.status === 'ONLINE' ? '#22c55e' : '#ef4444'}">
               ${device.status}
             </span>
+            <span style="font-size:11px;color:#64748b;font-family:monospace">${device.device_id}</span>
           </div>
           ${zoneHtml}
-          ${contentHtml}
-          <div style="font-size:10px;color:#94a3b8;margin-top:6px;border-top:1px solid #f1f5f9;padding-top:4px">
-            ${device.latitude.toFixed(5)}, ${device.longitude.toFixed(5)}
-            ${device.last_seen ? ` · ${new Date(device.last_seen).toLocaleTimeString()}` : ''}
+          ${adHtml}
+          <div style="font-size:10px;color:#94a3b8;margin-top:8px;border-top:1px solid #f1f5f9;padding-top:5px;display:flex;justify-content:space-between;align-items:center">
+            <span>${device.latitude.toFixed(4)}, ${device.longitude.toFixed(4)}</span>
+            <a href="/devices/${device.device_id}" style="color:#2563eb;text-decoration:none;font-weight:600">Inspect →</a>
           </div>
         </div>
       `;
 
       const existing = markersRef.current.get(device.device_id);
       if (existing) {
-        existing.setLatLng([device.latitude, device.longitude]);
         existing.setIcon(icon);
         existing.setPopupContent(popup);
-        // If user has this popup open, refresh it immediately so they see the new zone/content
         if (existing.isPopupOpen()) {
           existing.getPopup()?.update();
         }
+
+        // Smooth liquid marker movement interpolation via requestAnimationFrame
+        const currentLatLng = existing.getLatLng();
+        const dLat = Math.abs(device.latitude - currentLatLng.lat);
+        const dLon = Math.abs(device.longitude - currentLatLng.lng);
+        const distanceDegrees = Math.sqrt(dLat * dLat + dLon * dLon);
+
+        // If distance is reasonable for moving telemetry (under ~4.0 degrees), animate smoothly
+        if (distanceDegrees > 0.00005 && distanceDegrees < 4.0) {
+          const existingAnim = animationsRef.current.get(device.device_id);
+          if (existingAnim) {
+            cancelAnimationFrame(existingAnim.rafId);
+          }
+
+          const startLat = currentLatLng.lat;
+          const startLon = currentLatLng.lng;
+          const targetLat = device.latitude;
+          const targetLon = device.longitude;
+          const startTime = performance.now();
+          const duration = 950; // smooth 950ms interpolation for ~1.0s telemetry interval
+
+          const animateStep = (now: number) => {
+            const elapsed = now - startTime;
+            const progress = Math.min(1.0, elapsed / duration);
+            // Smooth ease-out curve
+            const ease = 1 - Math.pow(1 - progress, 2);
+
+            const interpLat = startLat + (targetLat - startLat) * ease;
+            const interpLon = startLon + (targetLon - startLon) * ease;
+            existing.setLatLng([interpLat, interpLon]);
+
+            if (progress < 1.0) {
+              const nextRaf = requestAnimationFrame(animateStep);
+              const animObj = animationsRef.current.get(device.device_id);
+              if (animObj) animObj.rafId = nextRaf;
+            } else {
+              animationsRef.current.delete(device.device_id);
+            }
+          };
+
+          const rafId = requestAnimationFrame(animateStep);
+          animationsRef.current.set(device.device_id, {
+            startLat, startLon, targetLat, targetLon, startTime, duration, rafId
+          });
+        } else {
+          // Direct snap for huge teleport jumps or initialization
+          existing.setLatLng([device.latitude, device.longitude]);
+        }
+
       } else {
         const marker = L.marker([device.latitude, device.longitude], { icon })
           .bindPopup(popup, { maxWidth: 260 })
           .addTo(map);
+
+        marker.on('click', () => {
+          onSelectDevice?.(device);
+        });
+
         markersRef.current.set(device.device_id, marker);
       }
     });
@@ -135,18 +220,20 @@ export default function LiveMap({ devices, zones }: LiveMapProps) {
     // Remove stale markers
     markersRef.current.forEach((marker, id) => {
       if (!seenIds.has(id)) {
+        const anim = animationsRef.current.get(id);
+        if (anim) cancelAnimationFrame(anim.rafId);
+        animationsRef.current.delete(id);
         marker.remove();
         markersRef.current.delete(id);
       }
     });
-  }, [devices]);
+  }, [devices, selectedDeviceId, onSelectDevice]);
 
   // Draw zone overlays
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    // Clear previous zone overlays
     circlesRef.current.forEach((c) => c.remove());
     polygonsRef.current.forEach((p) => p.remove());
     circlesRef.current = [];

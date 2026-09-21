@@ -77,12 +77,25 @@ export interface DeviceLogItem {
   details_json?: string;
 }
 
+export interface PlaylistItem {
+  campaign_id?: number | null;
+  content_id?: number | null;
+  title: string;
+  file_url?: string | null;
+  media_type?: string;
+  duration?: number;
+  priority?: number;
+  description?: string | null;
+}
+
 export interface DeviceDetail extends DeviceListItem {
   assignment_reason?: string;
   assigned_by?: string;
   recent_logs: DeviceLogItem[];
   override_content_id?: number;
   default_content_id?: number;
+  playlist?: PlaylistItem[];
+  slot_duration?: number;
 }
 
 export interface DeviceQueryParams {
@@ -120,6 +133,8 @@ export interface DeviceLocationMarker {
   current_zone?: string | null;
   current_content_title?: string | null;
   current_content_url?: string | null;
+  playlist?: PlaylistItem[];
+  slot_duration?: number;
   last_seen?: string | null;
 }
 

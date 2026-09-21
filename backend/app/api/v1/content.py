@@ -19,17 +19,25 @@ def upload_content(
     description: Optional[str] = Form(None),
     duration: float = Form(10.0),
     tags: Optional[str] = Form(None),
+    zone_ids: Optional[str] = Form(None),
+    priority: int = Form(5),
+    is_active: bool = Form(True),
+    is_default: bool = Form(False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """Upload image or video media file to the platform"""
+    """Upload image or video media file to the platform with zone targeting & priority"""
     return create_content(
         db=db,
         title=title,
         description=description,
         file=file,
         duration=duration,
-        tags=tags
+        tags=tags,
+        zone_ids=zone_ids,
+        priority=priority,
+        is_active=is_active,
+        is_default=is_default
     )
 
 @router.get("/{content_id}", response_model=ContentResponse)

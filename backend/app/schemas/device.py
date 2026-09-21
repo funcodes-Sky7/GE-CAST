@@ -79,26 +79,40 @@ class DeviceLogItem(BaseModel):
     class Config:
         from_attributes = True
 
+class PlaylistItemPayload(BaseModel):
+    campaign_id: Optional[int] = None
+    content_id: Optional[int] = None
+    title: str
+    file_url: Optional[str] = None
+    media_type: str = "image"
+    duration: float = 3.0
+    priority: Optional[int] = 5
+    description: Optional[str] = None
+
 class DeviceDetailResponse(DeviceResponse):
     assignment_reason: Optional[str] = None
     assigned_by: Optional[str] = None
     recent_logs: List[DeviceLogItem] = []
+    playlist: Optional[List[PlaylistItemPayload]] = []
+    slot_duration: Optional[int] = 3
 
 class ContentPayload(BaseModel):
-    id: int
+    id: Optional[int] = None
     title: str
     file_url: str
     media_type: str = "image"
-    duration: Optional[float] = 10.0
+    duration: Optional[float] = 3.0
     tags: Optional[str] = None
 
 class DeviceCurrentContentResponse(BaseModel):
     device_id: str
     content_id: Optional[int] = None
     content: Optional[ContentPayload] = None
-    reason: str  # e.g., "ZONE_SCHEDULE", "ZONE_ASSIGNMENT", "DEVICE_OVERRIDE", "DEFAULT_FALLBACK", "NONE"
+    reason: str  # e.g., "CAMPAIGN_ROTATION", "ZONE_SCHEDULE", "ZONE_ASSIGNMENT", "DEVICE_OVERRIDE", "DEFAULT_FALLBACK", "NONE"
     zone_id: Optional[int] = None
     zone_name: Optional[str] = None
+    playlist: Optional[List[PlaylistItemPayload]] = []
+    slot_duration: Optional[int] = 3
     timestamp: datetime = datetime.utcnow()
 
 class DeviceLocationMarker(BaseModel):
@@ -113,6 +127,8 @@ class DeviceLocationMarker(BaseModel):
     current_zone: Optional[str] = None
     current_content_title: Optional[str] = None
     current_content_url: Optional[str] = None
+    playlist: Optional[List[PlaylistItemPayload]] = []
+    slot_duration: Optional[int] = 3
     last_seen: Optional[datetime] = None
 
 class DeviceActionRequest(BaseModel):
